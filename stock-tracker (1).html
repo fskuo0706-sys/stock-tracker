@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>股票追蹤儀表板</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f5f5f3; --surface: #ffffff; --surface2: #f0efeb;
+    --border: rgba(0,0,0,0.1); --text: #1a1a1a; --text2: #666; --text3: #999;
+    --green: #1D9E75; --green-bg: #EAF3DE; --green-text: #3B6D11;
+    --red: #D85A30; --red-bg: #FAECE7; --red-text: #993C1D;
+    --blue-bg: #E6F1FB; --blue-text: #185FA5;
+    --radius: 10px; --radius-sm: 6px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1a1a; --surface: #242424; --surface2: #2e2e2e;
+      --border: rgba(255,255,255,0.1); --text: #f0f0f0; --text2: #aaa; --text3: #666;
+      --green-bg: #173404; --green-text: #97C459;
+      --red-bg: #4A1B0C; --red-text: #F09595;
+      --blue-bg: #042C53; --blue-text: #85B7EB;
+    }
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  .container { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem; }
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; }
+  .header h1 { font-size: 20px; font-weight: 600; }
+  .update-time { font-size: 12px; color: var(--text3); margin-top: 3px; }
+  .sync-btn { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 7px 16px; cursor: pointer; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border); color: var(--text2); transition: background 0.15s; }
+  .sync-btn:hover { background: var(--surface2); }
+  .sync-btn svg { transition: transform 0.8s; }
+  .sync-btn.spinning svg { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+  .metric { background: var(--surface); border-radius: var(--radius); padding: 1.2rem 1.25rem; border: 1px solid var(--border); }
+  .metric-label { font-size: 12px; color: var(--text2); margin-bottom: 8px; }
+  .metric-value { font-size: 24px; font-weight: 600; }
+  .metric-sub { font-size: 12px; margin-top: 4px; color: var(--text3); }
+  .pos { color: var(--green); } .neg { color: var(--red); }
+  .card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; margin-bottom: 1rem; }
+  .tabs { display: flex; border-bottom: 1px solid var(--border); }
+  .tab { flex: 1; padding: 12px; font-size: 13px; text-align: center; cursor: pointer; border: none; background: transparent; color: var(--text2); transition: background 0.15s; }
+  .tab:hover { background: var(--surface2); }
+  .tab.active { color: var(--text); font-weight: 500; border-bottom: 2px solid var(--text); }
+  .tab-content { padding: 1.5rem; display: none; }
+  .tab-content.active { display: block; }
+  .section-title { font-size: 12px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; color: var(--text3); font-weight: 400; font-size: 12px; padding: 0 10px 10px 0; border-bottom: 1px solid var(--border); }
+  th:last-child, td:last-child { text-align: right; padding-right: 0; }
+  td { padding: 12px 10px 12px 0; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  .ticker-badge { background: var(--blue-bg); color: var(--blue-text); font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 5px; display: inline-block; }
+  .pct-badge { font-size: 12px; padding: 3px 9px; border-radius: 5px; font-weight: 500; display: inline-block; }
+  .pct-pos { background: var(--green-bg); color: var(--green-text); }
+  .pct-neg { background: var(--red-bg); color: var(--red-text); }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-field { display: flex; flex-direction: column; gap: 6px; }
+  .form-field label { font-size: 12px; color: var(--text2); }
+  .form-field input, .form-field select { padding: 8px 12px; font-size: 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); outline: none; transition: border 0.15s; }
+  .form-field input:focus, .form-field select:focus { border-color: var(--text2); }
+  .submit-btn { width: 100%; margin-top: 14px; padding: 10px; font-size: 14px; font-weight: 500; background: var(--text); color: var(--bg); border: none; border-radius: var(--radius-sm); cursor: pointer; transition: opacity 0.15s; }
+  .submit-btn:hover { opacity: 0.85; }
+  .submit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .msg { font-size: 13px; padding: 10px 14px; border-radius: var(--radius-sm); margin-top: 12px; display: none; }
+  .msg.ok { background: var(--green-bg); color: var(--green-text); display: block; }
+  .msg.err { background: var(--red-bg); color: var(--red-text); display: block; }
+  .empty { text-align: center; padding: 3rem; color: var(--text3); font-size: 14px; }
+  .price-note { font-size: 11px; color: var(--text3); margin-top: 12px; }
+  .legend { display: flex; gap: 16px; margin-top: 12px; font-size: 12px; color: var(--text2); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 5px; }
+  @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } .metrics { grid-template-columns: 1fr 1fr; } .container { padding: 1rem; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div>
+      <h1>股票追蹤儀表板</h1>
+      <div class="update-time" id="updateTime">載入中...</div>
+    </div>
+    <button class="sync-btn" id="syncBtn" onclick="loadAll()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+      重新整理
+    </button>
+  </div>
+  <div class="metrics">
+    <div class="metric"><div class="metric-label">總投入成本</div><div class="metric-value" id="mCost">—</div></div>
+    <div class="metric"><div class="metric-label">目前市值</div><div class="metric-value" id="mValue">—</div></div>
+    <div class="metric"><div class="metric-label">未實現損益</div><div class="metric-value" id="mPnl">—</div><div class="metric-sub" id="mPct">—</div></div>
+    <div class="metric"><div class="metric-label">持股檔數</div><div class="metric-value" id="mCount">—</div></div>
+  </div>
+  <div class="card">
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('holdings')">持股損益</button>
+      <button class="tab" onclick="showTab('chart')">市值走勢</button>
+      <button class="tab" onclick="showTab('add')">新增交易</button>
+    </div>
+    <div class="tab-content active" id="tabHoldings">
+      <div class="section-title">各檔持股狀況</div>
+      <div id="holdingsBody"><div class="empty">載入中...</div></div>
+      <p class="price-note" id="priceNote"></p>
+    </div>
+    <div class="tab-content" id="tabChart">
+      <div class="section-title">市值歷史走勢</div>
+      <div style="position:relative; width:100%; height:260px;">
+        <canvas id="snapChart" role="img" aria-label="市值走勢圖"></canvas>
+      </div>
+      <div class="legend" id="chartLegend" style="display:none">
+        <span><span class="legend-dot" style="background:#1D9E75"></span>市值</span>
+        <span><span class="legend-dot" style="background:#B4B2A9; height:3px; margin-top:3px; border-radius:1px"></span>投入成本</span>
+      </div>
+      <div class="empty" id="chartEmpty" style="display:none">快照資料不足，每次重新整理會自動記錄一筆</div>
+    </div>
+    <div class="tab-content" id="tabAdd">
+      <div class="section-title">新增一筆交易</div>
+      <div class="form-grid">
+        <div class="form-field"><label>日期</label><input type="date" id="fDate" /></div>
+        <div class="form-field"><label>股票代號</label><input type="text" id="fTicker" placeholder="例：2330" /></div>
+        <div class="form-field"><label>買 / 賣</label><select id="fAction"><option value="BUY">買入 BUY</option><option value="SELL">賣出 SELL</option></select></div>
+        <div class="form-field"><label>股數</label><input type="number" id="fShares" placeholder="例：1000" min="1" /></div>
+        <div class="form-field"><label>成交價格（元）</label><input type="number" id="fPrice" placeholder="例：850.5" step="0.01" /></div>
+        <div class="form-field"><label>備註（選填）</label><input type="text" id="fNote" placeholder="例：停利出場" /></div>
+      </div>
+      <button class="submit-btn" id="submitBtn" onclick="addTransaction()">確認新增</button>
+      <div class="msg" id="formMsg"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbw0lruqD9PaM471ZHsEuybJZZ-EAEG-CHE6jPOp_yGhJsrN2VIhwI9C8nMFJ9IGpbD_/exec';
+let snapChartInst = null;
+let holdings = {};
+let currentPrices = {};
+
+function fmt(n) { return Math.round(n).toLocaleString('zh-TW'); }
+function fmtPct(n) { return (n >= 0 ? '+' : '') + n.toFixed(2) + '%'; }
+
+function showTab(t) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1)).classList.add('active');
+  ['holdings','chart','add'].forEach((id, i) => {
+    if (id === t) document.querySelectorAll('.tab')[i].classList.add('active');
+  });
+}
+
+// JSONP 方式呼叫 GAS，繞過 CORS
+function gasCall(params) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'cb_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    const timeout = setTimeout(() => {
+      delete window[cbName];
+      reject(new Error('請求逾時，請確認 Apps Script 已部署'));
+    }, 15000);
+
+    window[cbName] = (data) => {
+      clearTimeout(timeout);
+      delete window[cbName];
+      const s = document.getElementById(cbName + '_script');
+      if (s) s.remove();
+      resolve(data);
+    };
+
+    params.callback = cbName;
+    const url = GAS_URL + '?' + new URLSearchParams(params);
+    const script = document.createElement('script');
+    script.id = cbName + '_script';
+    script.src = url;
+    script.onerror = () => {
+      clearTimeout(timeout);
+      delete window[cbName];
+      script.remove();
+      reject(new Error('無法連線到 Apps Script'));
+    };
+    document.head.appendChild(script);
+  });
+}
+
+async function fetchPrice(ticker) {
+  try {
+    const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}.TW?interval=1d&range=1d`);
+    const d = await r.json();
+    return d?.chart?.result?.[0]?.meta?.regularMarketPrice || null;
+  } catch { return null; }
+}
+
+function calcHoldings(rows) {
+  const h = {};
+  rows.slice(1).forEach(r => {
+    if (!r[0] || !r[1]) return;
+    const [, ticker, action, shares, price] = r;
+    if (!h[ticker]) h[ticker] = { shares: 0, cost: 0 };
+    const qty = Number(shares) || 0;
+    const px = Number(price) || 0;
+    if (action === 'BUY') {
+      h[ticker].cost += qty * px;
+      h[ticker].shares += qty;
+    } else if (action === 'SELL') {
+      const avg = h[ticker].shares > 0 ? h[ticker].cost / h[ticker].shares : 0;
+      h[ticker].cost -= avg * qty;
+      h[ticker].shares -= qty;
+    }
+  });
+  Object.keys(h).forEach(k => { if (h[k].shares <= 0) delete h[k]; });
+  return h;
+}
+
+function renderHoldings() {
+  const tickers = Object.keys(holdings);
+  if (!tickers.length) {
+    document.getElementById('holdingsBody').innerHTML = '<div class="empty">尚無持股記錄，請先新增交易</div>';
+    return null;
+  }
+  let totalCost = 0, totalValue = 0, rows = '';
+  tickers.forEach(t => {
+    const h = holdings[t];
+    const avg = h.shares > 0 ? h.cost / h.shares : 0;
+    const cur = currentPrices[t] || avg;
+    const val = cur * h.shares;
+    const pnl = val - h.cost;
+    const pct = h.cost > 0 ? (pnl / h.cost) * 100 : 0;
+    totalCost += h.cost; totalValue += val;
+    const hasPrice = currentPrices[t] != null;
+    rows += `<tr>
+      <td><span class="ticker-badge">${t}</span></td>
+      <td>${fmt(h.shares)}</td>
+      <td>${avg.toFixed(2)}</td>
+      <td>${hasPrice ? cur.toFixed(2) : '<span style="color:var(--text3)">—</span>'}</td>
+      <td class="${pnl >= 0 ? 'pos' : 'neg'}">${pnl >= 0 ? '+' : ''}${fmt(pnl)}</td>
+      <td><span class="pct-badge ${pct >= 0 ? 'pct-pos' : 'pct-neg'}">${fmtPct(pct)}</span></td>
+    </tr>`;
+  });
+  document.getElementById('holdingsBody').innerHTML = `
+    <table>
+      <thead><tr><th>代號</th><th>股數</th><th>均價</th><th>現價</th><th>損益(元)</th><th>報酬率</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  const pnl = totalValue - totalCost;
+  const pct = totalCost > 0 ? (pnl / totalCost) * 100 : 0;
+  document.getElementById('mCost').textContent = '$' + fmt(totalCost);
+  document.getElementById('mValue').textContent = '$' + fmt(totalValue);
+  document.getElementById('mPnl').textContent = (pnl >= 0 ? '+' : '') + '$' + fmt(pnl);
+  document.getElementById('mPnl').className = 'metric-value ' + (pnl >= 0 ? 'pos' : 'neg');
+  document.getElementById('mPct').textContent = fmtPct(pct);
+  document.getElementById('mPct').className = 'metric-sub ' + (pnl >= 0 ? 'pos' : 'neg');
+  document.getElementById('mCount').textContent = tickers.length + ' 檔';
+  document.getElementById('priceNote').textContent = Object.keys(currentPrices).length
+    ? '* 股價來自 Yahoo Finance，可能有 15 分鐘延遲'
+    : '* 無法取得即時股價，以買入均價估算';
+  return { totalCost, totalValue };
+}
+
+function renderChart(snapRows) {
+  const data = snapRows.slice(1).filter(r => r[0] && r[1]);
+  if (data.length < 2) { document.getElementById('chartEmpty').style.display = ''; return; }
+  document.getElementById('chartEmpty').style.display = 'none';
+  document.getElementById('chartLegend').style.display = 'flex';
+  if (snapChartInst) snapChartInst.destroy();
+  snapChartInst = new Chart(document.getElementById('snapChart'), {
+    type: 'line',
+    data: {
+      labels: data.map(r => r[0]),
+      datasets: [
+        { label: '市值', data: data.map(r => Number(r[1])), borderColor: '#1D9E75', backgroundColor: 'rgba(29,158,117,0.08)', borderWidth: 2, pointRadius: 3, fill: true, tension: 0.3 },
+        { label: '成本', data: data.map(r => Number(r[2])), borderColor: '#B4B2A9', borderWidth: 1.5, borderDash: [4,4], pointRadius: 0, fill: false }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.dataset.label + ': $' + fmt(c.parsed.y) } } },
+      scales: {
+        y: { ticks: { callback: v => '$' + fmt(v), font: { size: 11 } }, grid: { color: 'rgba(128,128,128,0.1)' } },
+        x: { ticks: { font: { size: 11 }, maxRotation: 45, maxTicksLimit: 8 }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+async function saveSnapshot(totalCost, totalValue) {
+  const today = new Date().toISOString().slice(0, 10);
+  try { await gasCall({ action: 'addSnapshot', date: today, total_value: totalValue.toFixed(0), total_cost: totalCost.toFixed(0) }); }
+  catch(e) { console.warn('快照寫入失敗', e); }
+}
+
+async function loadAll() {
+  const btn = document.getElementById('syncBtn');
+  btn.classList.add('spinning');
+  try {
+    const [txRes, snapRes] = await Promise.all([
+      gasCall({ action: 'getTransactions' }),
+      gasCall({ action: 'getSnapshots' })
+    ]);
+    if (!txRes.success) throw new Error('讀取交易失敗');
+    holdings = calcHoldings(txRes.data);
+    const tickers = Object.keys(holdings);
+    if (tickers.length) {
+      currentPrices = {};
+      const results = await Promise.allSettled(tickers.map(t => fetchPrice(t)));
+      results.forEach((r, i) => { if (r.status === 'fulfilled' && r.value) currentPrices[tickers[i]] = r.value; });
+    }
+    const totals = renderHoldings();
+    if (snapRes.success) renderChart(snapRes.data);
+    if (totals) await saveSnapshot(totals.totalCost, totals.totalValue);
+    document.getElementById('updateTime').textContent = '更新於 ' + new Date().toLocaleTimeString('zh-TW');
+  } catch(e) {
+    document.getElementById('holdingsBody').innerHTML = `<div class="empty">讀取失敗：${e.message}<br><small style="display:block;margin-top:8px">請確認 Apps Script「誰可以存取」設為「所有人」</small></div>`;
+    document.getElementById('updateTime').textContent = '讀取失敗';
+  }
+  btn.classList.remove('spinning');
+}
+
+async function addTransaction() {
+  const btn = document.getElementById('submitBtn');
+  const msg = document.getElementById('formMsg');
+  const date = document.getElementById('fDate').value;
+  const ticker = document.getElementById('fTicker').value.trim().toUpperCase();
+  const action2 = document.getElementById('fAction').value;
+  const shares = document.getElementById('fShares').value;
+  const price = document.getElementById('fPrice').value;
+  const note = document.getElementById('fNote').value.trim();
+  if (!date || !ticker || !shares || !price) {
+    msg.className = 'msg err'; msg.textContent = '請填寫日期、代號、股數、價格'; return;
+  }
+  btn.disabled = true; btn.textContent = '新增中...'; msg.className = 'msg';
+  try {
+    const res = await gasCall({ action: 'addTransaction', date, ticker, action2, shares, price, note });
+    if (res.success) {
+      msg.className = 'msg ok'; msg.textContent = '✓ 已成功新增至 Google Sheets！';
+      ['fTicker','fShares','fPrice','fNote'].forEach(id => document.getElementById(id).value = '');
+      setTimeout(() => { loadAll(); showTab('holdings'); }, 1000);
+    } else throw new Error(res.error || '寫入失敗');
+  } catch(e) { msg.className = 'msg err'; msg.textContent = '新增失敗：' + e.message; }
+  btn.disabled = false; btn.textContent = '確認新增';
+}
+
+document.getElementById('fDate').value = new Date().toISOString().slice(0, 10);
+loadAll();
+</script>
+</body>
+</html>
